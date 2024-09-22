@@ -1,55 +1,86 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import style from "./transactionHistory.module.css";
 
 const TransactionHistory = () => {
   const [transactions, setTransactions] = useState([]);
   const [searchAccountId, setSearchAccountId] = useState("");
+  const navigate = useNavigate();
 
-  const fetchAllTransactions = () => {
+  const fetchAllTransactions = useCallback(() => {
     fetch("http://localhost:8081/api/accounts/transactions", {
       method: "GET",
     })
-      .then((response) => response.json())
+      .then((response) => {
+        if (!response.ok) {
+          if (response.status === 400) {
+            throw new Error("Bad request (400)");
+          } else if (response.status === 404) {
+            throw new Error("Transactions not found (404)");
+          } else if (response.status === 500) {
+            throw new Error("Server error (500)");
+          } else {
+            throw new Error(`Unexpected error (${response.status})`);
+          }
+        }
+        return response.json();
+      })
       .then((data) => setTransactions(data))
       .catch((error) => {
-        console.error(error);
-        window.alert(
-          `Transaction history can't be loaded due to error: ${error}`
+        const errorCode = error.message.match(/\((\d+)\)/)?.[1] || 500;
+        navigate(
+          `/error?code=${errorCode}&message=${encodeURIComponent(
+            error.message
+          )}`
         );
       });
-  };
+  }, [navigate]);
 
   useEffect(() => {
     fetchAllTransactions();
-  }, []);
+  }, [fetchAllTransactions]);
 
   const handleSearch = (e) => {
     e.preventDefault();
     if (searchAccountId) {
       fetch(
-        `http://localhost:8081/api/accounts/transactions/${searchAccountId}`
+        `http://localhost:8081/api/accounts/transactions/${searchAccountId}`,
+        {
+          method: "GET",
+        }
       )
         .then((response) => {
-          if (response.ok) {
-            return response.json();
-          } else {
-            window.alert("There is no transaction history on this account Id");
+          if (!response.ok) {
+            if (response.status === 400) {
+              throw new Error("Bad request (400)");
+            } else if (response.status === 404) {
+              throw new Error("Transactions not found (404)");
+            } else if (response.status === 500) {
+              throw new Error("Server error (500)");
+            } else {
+              throw new Error(`Unexpected error (${response.status})`);
+            }
           }
+          return response.json();
         })
         .then((data) => {
-          if (data.length>0) {
-            setTransactions(data)
+          if (data.length > 0) {
+            setTransactions(data);
           } else {
-            window.alert("There is no transaction history on this account Id");
+            throw new Error("Transactions not found (404)");
           }
         })
         .catch((error) => {
-          console.error(error);
-          window.alert(`Search failed due to an error: ${error}`);
+          const errorCode = error.message.match(/\((\d+)\)/)?.[1] || 500;
+          navigate(
+            `/error?code=${errorCode}&message=${encodeURIComponent(
+              error.message
+            )}`
+          );
         });
       setSearchAccountId("");
     } else {
-      window.alert("Enter account Id to proceed");
+      window.alert("Enter account ID to proceed");
     }
   };
 
@@ -62,28 +93,25 @@ const TransactionHistory = () => {
     <section className={style.section}>
       <h3 className={style.sideHeading}>Transactions Section</h3>
       <div className={style.search}>
-        <form
-          method="get"
-          onSubmit={handleSearch}
-        >
+        <form method="get" onSubmit={handleSearch}>
           <input
             type="number"
             value={searchAccountId}
-            placeholder="Enter account Id"
+            placeholder="Enter account ID"
             onChange={(e) => setSearchAccountId(e.target.value)}
             min={1}
           />
         </form>
         <button onClick={handleSearch}>Search</button>
-        <button type="reset" onClick={() => handleReset()}>
+        <button type="reset" onClick={handleReset}>
           Reset
         </button>
       </div>
       <table className={style.transactionsTable}>
         <thead>
           <tr>
-            <th>Transaction Id</th>
-            <th>Account Id</th>
+            <th>Transaction ID</th>
+            <th>Account ID</th>
             <th>Amount</th>
             <th>Transaction Type</th>
             <th>Timestamp</th>
